@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@deepstream/client": "^7.0.1"
+  }
+}
