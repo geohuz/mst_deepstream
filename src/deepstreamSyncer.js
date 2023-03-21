@@ -15,21 +15,22 @@ export async function loadFromDS(node) {
   let snapshot = {}
   await list.whenReady()
 
-  // list添加删除侦听
+  // list 它端添加删除侦听
   list.on('entry-added', async(recordName)=> {
     console.info("BackEnd list add sync to Frontend ", recordName)
     let record = dsc.record.getRecord(recordName)
     await record.whenReady()
-    unprotect(getRoot(node))
-
-    let recordContent = record.get()
-    node.put(recordContent)
-    // 后端list新加入记录的修改侦听
     record.subscribe(newData=> {
+      console.log("subscribed", newData )
       let idValue = getIdentifier(getChildType(node).create(newData))
       applySubscribedData(newData, node, idValue)
     })
+    unprotect(getRoot(node))
+    let recordContent = record.get()
+    node.put(recordContent)
+    // 它端list新加入记录的修改侦听
   })
+  // list 它端删除侦听
   list.on("entry-removed", async(recordName)=> {
     console.info("BackEnd list remove sync to Frontend ", recordName)
     let xs = recordName.split('/')
@@ -51,7 +52,7 @@ export async function loadFromDS(node) {
     let idValue = getIdentifier(getChildType(node).create(recordContent))
     snapshot[idValue] = recordContent
 
-    // 首次加入记录的修改侦听
+    // 首次加入记录的它端修改侦听
     rec.subscribe(newData=> {
       idValue = getIdentifier(getChildType(node).create(newData))
       applySubscribedData(newData, node, idValue)
@@ -62,7 +63,7 @@ export async function loadFromDS(node) {
 }
 
 function applySubscribedData(data, node, idValue) {
-  console.log("entering recordsub")
+  console.log("entering applySubscribedData")
   let recordNode = node.get(idValue)
   let recordNodeValue = recordNode.toJSON()
   if (!isEqual(data, recordNodeValue)) {
@@ -76,45 +77,47 @@ export async function triggerDSUpdate(treeNode, patch) {
   const pathXS = patch.path.split('/') 
   const listName = pathXS.slice(0,2).join('/')
   const recordName = pathXS.slice(0,3).join('/')
-  let recordContent = {}
-  let recordExist = await dsc.record.has(recordName)
-  if (recordExist) {
-    recordContent = dsc.record.getRecord(recordName).get()
-    console.info('Memory recordContent', recordContent)
+  let localRecordContent = {}
+  let localRecordExist = await dsc.record.has(recordName)
+  if (localRecordExist) {
+    localRecordContent = dsc.record.getRecord(recordName).get()
+    console.info('Local Memory RecordContent', localRecordContent)
   } 
-  let recordIsEmpty = (Object.keys(recordContent).length==0)
-  console.info(`onPatch recordName: ${recordName} listName: ${listName} recordExist: ${recordExist} recordContent: ${JSON.stringify(recordContent)} recordIsEmpty: ${recordIsEmpty}`)
+  let localRecordIsEmpty = (Object.keys(localRecordContent).length==0)
+  console.info(`onPatch recordName: ${recordName} listName: ${listName} localRecordExist: ${localRecordExist} localRecordContent: ${JSON.stringify(localRecordContent)} localRecordIsEmpty: ${localRecordIsEmpty}`)
   switch (patch.op) {
     case "replace":
       let field = pathXS[pathXS.length-1]
-      if (recordContent[field] !== patch.value) {
+      if (localRecordContent[field] !== patch.value) {
         console.info("Frontend replace sync to Backend: ", patch)
         dsc.record.setData(recordName, `${field}`, patch.value)
       }
       break
     case "add":
-      if (!recordExist && recordIsEmpty) {
+      // 本端没有记录
+      if (!localRecordExist) {
         console.info("Frontend add sync to Backend", patch)
-        // dsc.record.setData(recordName, patch.value)
         let record = dsc.record.getRecord(recordName)
         await record.whenReady()
         record.set(patch.value)
-        // 前端加入记录的修改侦听
+        // 本端加入记录的它端修改侦听
         record.subscribe(newData=>{
           let idValue = getIdentifier(getChildType(treeNode).create(newData))
           applySubscribedData(newData, treeNode, idValue)
         })
-        let listAdd = dsc.record.getList(listName)
-        listAdd.whenReady(()=>listAdd.addEntry(recordName))
+        let list = dsc.record.getList(listName)
+        list.whenReady(()=>{
+          list.addEntry(recordName)
+        })
       }
       break
     case "remove":
-      if (recordExist) {
+      if (localRecordExist) {
         console.info("Frontend delete sync to Backend: ", patch)
         let list = dsc.record.getList(listName)
         list.whenReady(()=>list.removeEntry(recordName))
-        let removeRecord = dsc.record.getRecord(recordName)
-        removeRecord.whenReady(rec=> {
+        let record = dsc.record.getRecord(recordName)
+        record.whenReady(rec=> {
           //rec.discard()
           rec.delete()
         })
