@@ -21,7 +21,6 @@ export async function loadFromDS(node) {
     let record = dsc.record.getRecord(recordName)
     await record.whenReady()
     record.subscribe(newData=> {
-      console.log("subscribed", newData )
       let idValue = getIdentifier(getChildType(node).create(newData))
       applySubscribedData(newData, node, idValue)
     })
