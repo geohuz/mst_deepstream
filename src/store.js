@@ -1,6 +1,6 @@
 import { types, flow, onPatch, destroy, getParent } from 'mobx-state-tree'
 import {remove} from 'mobx'
-import { loadFromDS, triggerDSUpdate } from './deepstreamSyncer.js'
+import { loadFromDS, triggerDSUpdate } from './mst-deepstream-syncer.js'
 import {dsc} from './contexts'
 
 const User = 
