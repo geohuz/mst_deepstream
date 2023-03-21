@@ -169,9 +169,10 @@ async function main() {
   dsc.record.setData('/users/new2', {id: "new2", firstname: "what?", lastname: "what?"})
    */
    
+/*
   let list = dsc.record.getList("/users")
   await list.whenReady()
-  list.removeEntry('/users/new2')
+  list.removeEntry('/users/new2')*/
 
   /*
   dsc.record.setData('/users/new555111', {id: "new5", firstname: "newBlabla", lastname: "nnnnnnnnnnnnnnnnnn5"})*/
@@ -182,8 +183,30 @@ async function main() {
   list.removeEntry('/users/abc-456')*/
   
   
-  //await populateData()
   await printList('/users')
+  //await populateData()
+  let list = dsc.record.getList("/users")
+  await list.whenReady()
+  list.on('entry-added', async(data)=> {
+    console.log("added: ", data)
+    let rec = dsc.record.getRecord(data)
+    await rec.whenReady()
+    console.log("record content: ", rec.get())
+    console.log("list........................................")
+    printList('/users')
+  })
+  list.on('entry-removed', async(data)=> {
+    console.log("removed: ", data)
+    await printList('/users')
+  })
+ 
+  list.getEntries().map(async(item)=>{
+      let rec = dsc.record.getRecord(item)
+      await rec.whenReady()
+      rec.subscribe(newData=> {
+        console.log("record change: ", newData)
+      })
+  })
   /*
   await printList('users_detail')
   await printList('addresses')
