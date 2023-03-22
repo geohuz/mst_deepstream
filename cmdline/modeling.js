@@ -184,7 +184,9 @@ async function main() {
   
   
   await printList('/users')
+  await printList('/todos')
   //await populateData()
+  /*
   let list = dsc.record.getList("/users")
   await list.whenReady()
   list.on('entry-added', async(data)=> {

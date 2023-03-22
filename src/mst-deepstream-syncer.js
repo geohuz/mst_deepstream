@@ -1,11 +1,11 @@
 import { dsc } from './contexts.jsx'
 import { getRelativePath, getParent, getIdentifier, 
-  unprotect, getChildType, applySnapshot, getRoot, destroy } from "mobx-state-tree"
+  unprotect, getChildType, applySnapshot, getRoot, destroy, getPathParts, resolvePath, getPath, tryResolve } from "mobx-state-tree"
+
 import isEqual from "lodash/isequal"
 // todo: 
 // 1. getUid: done
-// 2. reference
-// 3. debug flag
+// 2. reference: example done
 
 // 后端数据同步到前端
 export async function loadFromDS(node) { 
@@ -73,6 +73,10 @@ function applySubscribedData(data, node, idValue) {
 
 // 前端数据同步到后端数据
 export async function triggerDSUpdate(treeNode, patch) {
+  /*
+  console.log("path: ", patch.path)
+  console.info("tryResolve: ", tryResolve(getParent(treeNode), patch.path).toJSON())
+  console.info(`resolve Path: ${JSON.stringify(resolvePath(getParent(treeNode), patch.path).toJSON())}`) */
   const pathXS = patch.path.split('/') 
   const listName = pathXS.slice(0,2).join('/')
   const recordName = pathXS.slice(0,3).join('/')
@@ -80,22 +84,23 @@ export async function triggerDSUpdate(treeNode, patch) {
   let localRecordExist = await dsc.record.has(recordName)
   if (localRecordExist) {
     localRecordContent = dsc.record.getRecord(recordName).get()
-    console.info('Local Memory RecordContent', localRecordContent)
   } 
   let localRecordIsEmpty = (Object.keys(localRecordContent).length==0)
-  console.info(`onPatch recordName: ${recordName} listName: ${listName} localRecordExist: ${localRecordExist} localRecordContent: ${JSON.stringify(localRecordContent)} localRecordIsEmpty: ${localRecordIsEmpty}`)
+  console.info(`onPatch: `, patch)
+  console.info(`local record: recordName: ${recordName}  localRecordContent: ${JSON.stringify(localRecordContent)}`)
   switch (patch.op) {
     case "replace":
+      // todo: not euqal to local than replace
       let field = pathXS[pathXS.length-1]
       if (localRecordContent[field] !== patch.value) {
-        console.info("Frontend replace sync to Backend: ", patch)
+        console.info("Frontend replace sync to Backend: ", `recordName: ${recordName} field: ${field} value: ${JSON.stringify(patch.value)}`)
         dsc.record.setData(recordName, `${field}`, patch.value)
       }
       break
     case "add":
       // 本端没有记录
       if (!localRecordExist) {
-        console.info("Frontend add sync to Backend", patch)
+        console.info("Frontend add sync to Backend: ", `recordName: ${recordName} value: ${JSON.stringify(patch.value)}`)
         let record = dsc.record.getRecord(recordName)
         await record.whenReady()
         record.set(patch.value)

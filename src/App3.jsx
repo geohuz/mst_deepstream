@@ -58,7 +58,15 @@ const User = observer(({item}) => {
   return (
     <>
       <span>firstname: {item.firstname}</span> <input type="text" ref={inputFirstName} /> <button onClick={()=>item.setFirstName(inputFirstName.current.value)}>change</button> <button onClick={()=>item.remove()}>delete</button>
+
       <span>lastanme: {item.lastname}</span> <input type="text" ref={inputLastName} /> <button onClick={()=>item.setLastName(inputLastName.current.value)}>change</button>
+
+      <h3> user todos </h3>
+      {item.userTodos().map(item=>
+        <div key={item.id}>
+          <Todo item={item} />
+        </div>
+      )} 
     </>
   )
 })
@@ -70,10 +78,23 @@ const Todo = observer(({item}) => {
   return (
     <>
       <span>name: {item.name}</span> <input type="text" ref={inputName} /> <button onClick={()=>item.setName(inputName.current.value)}>change</button> <button onClick={()=>item.remove()}>delete</button>
+      <UserPicker
+        user={item.user} 
+        store={root.userStore}
+        onChange={userId=>item.setUser(userId)}
+      />
     </>
   )
 })
 
+const UserPicker = observer(props => (
+  <select value={props.user ? props.user.id : ""} onChange={e => props.onChange(e.target.value)}>
+      <option value="">-none-</option>
+      {values(props.store.users).map(user => (
+          <option key={user.id} value={user.id}>{user.firstname}</option>
+      ))}
+  </select>
+))
 
 
 export default observer(App)

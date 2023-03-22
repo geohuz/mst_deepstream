@@ -1,7 +1,8 @@
-import { types, flow, onPatch, destroy, getParent } from 'mobx-state-tree'
+import { types, flow, onPatch, destroy, getParent, getRoot } from 'mobx-state-tree'
 import {remove} from 'mobx'
 import { loadFromDS, triggerDSUpdate } from './mst-deepstream-syncer.js'
 import {dsc} from './contexts'
+import {values} from 'mobx'
 
 const User = 
   types.model({
@@ -19,6 +20,13 @@ const User =
     remove() {
       // 必须绕到parent操作
       getParent(self, 2).remove(self)
+    }
+  }))
+  .views(self=> ({
+    userTodos() {
+      return values(getRoot(self).
+              todoStore.todos).
+                filter(todo=>todo.user===self)
     }
   }))
 
@@ -43,9 +51,18 @@ const Todo = types
   .model({
     id: types.identifier,
     name: "",
-    done: false
+    done: false,
+    user: types.maybe(types.reference(types.late(()=>User)))
   })
   .actions(self=> ({
+    setUser(user) {               // identifer or a user model instance
+      if (user==="") {
+        self.user = undefined
+      } else {
+        self.user = user
+      }
+      //self.user.addUserTodo(self) // 这里怎么搞
+    },
     setName(value) {
       self.name = value
     },
