@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@deepstream/client": "^7.0.1",
+    "jiff": "^0.7.3",
     "lodash": "^4.17.21",
     "mobx": "^6.8.0",
     "mobx-react-lite": "^3.4.3",

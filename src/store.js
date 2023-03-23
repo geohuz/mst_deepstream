@@ -1,5 +1,4 @@
 import { types, flow, onPatch, destroy, getParent, getRoot } from 'mobx-state-tree'
-import {remove} from 'mobx'
 import { loadFromDS, triggerDSUpdate } from './mst-deepstream-syncer.js'
 import {dsc} from './contexts'
 import {values} from 'mobx'
@@ -24,9 +23,8 @@ const User =
   }))
   .views(self=> ({
     userTodos() {
-      return values(getRoot(self).
-              todoStore.todos).
-                filter(todo=>todo.user===self)
+      return values(getRoot(self).todoStore.todos)
+              .filter(todo=>todo.user===self)
     }
   }))
 
@@ -52,16 +50,14 @@ const Todo = types
     id: types.identifier,
     name: "",
     done: false,
-    user: types.maybe(types.reference(types.late(()=>User)))
+    users: types.map(types.maybe(types.reference(types.late(()=>User))))
   })
   .actions(self=> ({
-    setUser(user) {               // identifer or a user model instance
-      if (user==="") {
-        self.user = undefined
-      } else {
-        self.user = user
+    addUser(user) {    
+      if (user!=="") {
+        self.users.put(getRoot(self).userStore.users.get(user))
+        console.info("todo users: ", self.users.toJSON())
       }
-      //self.user.addUserTodo(self) // 这里怎么搞
     },
     setName(value) {
       self.name = value

@@ -81,7 +81,7 @@ const Todo = observer(({item}) => {
       <UserPicker
         user={item.user} 
         store={root.userStore}
-        onChange={userId=>item.setUser(userId)}
+        onChange={userId=>item.addUser(userId)}
       />
     </>
   )
