@@ -56,7 +56,7 @@ const Todo = types
     addUser(user) {    
       if (user!=="") {
         self.users.put(getRoot(self).userStore.users.get(user))
-        console.info("todo users: ", self.users.toJSON())
+        console.info("frontend get added todo users: ", self.users.toJSON())
       }
     },
     setName(value) {
