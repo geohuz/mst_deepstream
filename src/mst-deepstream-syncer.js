@@ -1,16 +1,18 @@
-import {patch, diff} from 'jiff'
-import { dsc } from './contexts.jsx'
-import { getRelativePath, getParent, getIdentifier, 
-  unprotect, getChildType, applySnapshot, getRoot, destroy, getPathParts, resolvePath, getPath, tryResolve, isModelType, getType, getMembers, getSnapshot } from "mobx-state-tree"
-
-import isEqual from "lodash/isequal"
 // todo: 
 // 1. getUid: done
 // 2. reference: example done
+// 4. snapshot级别的同步
+// 3. scroll to 避免大量listener
+
+import {diff} from 'jiff'
+import { dsc } from './contexts.jsx'
+import { getRelativePath, getParent, getIdentifier, 
+  unprotect, getChildType, applySnapshot, getRoot, destroy, getSnapshot } from "mobx-state-tree"
+import isEqual from "lodash/isequal"
 
 // 本地记录缓存
-// 本地记录操作
 const currentRecords = new Map()
+// 缓存管理
 const attachRecord = async(recordName, applyCreate, applyChange) => {
   // 如果缓存没有
   if (!currentRecords.get(recordName)) {
@@ -48,11 +50,6 @@ const attachRecordFront = async(recordName, recordContent,
   }
 }
 
-const discardRecord = (recordName) => {
-  const record = getRecord(recordName)
-  record.discard()
-  currentRecords.delete(recordName)
-}
 const deleteRecord = async(recordName, applyDelete) => {
   if (currentRecords.get(recordName)) {
     let serverRecordExist = await dsc.record.has(recordName)
@@ -149,7 +146,7 @@ export async function triggerDSUpdate(treeNode, patch) {
           applySnapshot(recordNode, newData)
         },
         (memoryData)=> {
-          console.log("memory data!", memoryData)
+          console.log("memory data: ", memoryData)
           if (!isEqual(patch.value, memoryData)) {
             // record子属性add
             // todo: 只处理了map(不过建议用map) 还需array处理
@@ -161,19 +158,28 @@ export async function triggerDSUpdate(treeNode, patch) {
             if (newPatch!==undefined) {
               let [_, field, key] = newPatch.path.split('/')
               console.info('field and key: ', field,  key)
-              dsc.record.setData(recordName, field, {[key]: patch.value})
+              //currentRecords.set(recordName, snapshotLeaf) // !!!!!!!!
+              dsc.record.setData(recordName, `${field}.${key}`, patch.value)
             }
           }
         })
       break
     case "remove":
-      // todo: remove sub property
-      await deleteRecord(recordName, async(recordName)=> {
-        console.info("Frontend delete sync to Backend: ", patch)
-        let list = dsc.record.getList(listName)
-        await list.whenReady()
-        list.removeEntry(recordName)
-      })
+      // remove 指令没有value, 只有path. 如果把recordName从path string
+      // 前部移除, 如果不为空则为移除的具体子属性, 否则就是删掉整条记录
+      let removePath = patch.path.replace(recordName, "")
+      if (removePath!=="") {
+        let [_, field, key] = removePath.split('/')
+        console.info('field and key: ', field,  key)
+        // record子属性remove
+        dsc.record.setData(recordName, `${field}.${key}`, undefined)
+      } else {
+        await deleteRecord(recordName, (recordName)=> {
+          console.info("Frontend delete sync to Backend: ", patch)
+          let list = dsc.record.getList(listName)
+          list.whenReady(()=> list.removeEntry(recordName))
+        })
+      }
       break
   }
 }
