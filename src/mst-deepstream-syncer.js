@@ -3,6 +3,17 @@
 // 2. reference: example done
 // 4. snapshot级别的同步
 // 3. scroll to 避免大量listener
+// 5. make dps store/field type?
+// 6. db 端
+// 如果在类级别有字段也同时加入list
+/*
+只能有一条记录
+ recordName:
+ /todos/classfields
+{
+  selectedTodo: 4
+}
+*/
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
@@ -127,6 +138,8 @@ export async function triggerDSUpdate(treeNode, patch) {
     case "replace":
       let field = pathXS[pathXS.length-1]
       if (currentRecords.get(recordName)[field] !== patch.value) {
+        // 更新缓存
+        currentRecords.set(recordName, snapshotLeaf) 
         console.info("Frontend replace sync to Backend: ", `recordName: ${recordName} field: ${field} value: ${JSON.stringify(patch.value)}`)
         dsc.record.setData(recordName, `${field}`, patch.value)
       }
@@ -143,6 +156,8 @@ export async function triggerDSUpdate(treeNode, patch) {
           console.log('get change from others')
           let idValue = getIdentifier(getChildType(treeNode).create(newData))
           let recordNode = treeNode.get(idValue)
+          // 更新缓存
+          currentRecords.set(recordName, snapshotLeaf) 
           applySnapshot(recordNode, newData)
         },
         (memoryData)=> {
@@ -158,7 +173,8 @@ export async function triggerDSUpdate(treeNode, patch) {
             if (newPatch!==undefined) {
               let [_, field, key] = newPatch.path.split('/')
               console.info('field and key: ', field,  key)
-              //currentRecords.set(recordName, snapshotLeaf) // !!!!!!!!
+              // 更新缓存
+              currentRecords.set(recordName, snapshotLeaf) 
               dsc.record.setData(recordName, `${field}.${key}`, patch.value)
             }
           }
@@ -171,6 +187,8 @@ export async function triggerDSUpdate(treeNode, patch) {
       if (removePath!=="") {
         let [_, field, key] = removePath.split('/')
         console.info('field and key: ', field,  key)
+        // 更新缓存
+        currentRecords.set(recordName, snapshotLeaf) 
         // record子属性remove
         dsc.record.setData(recordName, `${field}.${key}`, undefined)
       } else {
