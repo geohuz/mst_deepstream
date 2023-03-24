@@ -11,15 +11,16 @@
  recordName:
  /todos/classfields
 {
-  selectedTodo: 4
+  selectedTodo: patch.value
 }
 */
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
 import { getRelativePath, getParent, getIdentifier, 
-  unprotect, getChildType, applySnapshot, getRoot, destroy, getSnapshot } from "mobx-state-tree"
+  unprotect, getChildType, applySnapshot, getRoot, destroy, applyPatch, getSnapshot, getPath, getParentOfType, getPathParts, getType, splitJsonPath } from "mobx-state-tree"
 import isEqual from "lodash/isequal"
+import { split } from 'lodash'
 
 // 本地记录缓存
 const currentRecords = new Map()
@@ -92,6 +93,8 @@ export async function loadFromDS(node) {
         node.put(newData)
       },
       changedData=>{
+        // getChildType (node: todos/users)
+        // child: user 
         let idValue = getIdentifier(getChildType(node).create(changedData))
         let recordNode = node.get(idValue)
         applySnapshot(recordNode, changedData)
@@ -114,8 +117,16 @@ export async function loadFromDS(node) {
   await Promise.all(list.getEntries().map(async(item)=>{
     await attachRecord(item,
       newData=> {
-        let idValue = getIdentifier(getChildType(node).create(newData))
-        snapshot[idValue] = newData
+        // root property
+        if (item.includes("classProperty")) {
+          Object.entries(newData).map(([key, value])=> {
+            applyPatch(getParent(node, 1), {op: "replace", path: `/${key}`, value: value})
+            //console.log("node content: ", getParent(node, 2).toJSON())
+          })
+        } else {
+          let idValue = getIdentifier(getChildType(node).create(newData))
+          snapshot[idValue] = newData
+        }
       },
       changedData=> {
         let idValue = getIdentifier(getChildType(node).create(changedData))
@@ -130,22 +141,49 @@ export async function loadFromDS(node) {
 
 // 前端数据同步到后端数据
 export async function triggerDSUpdate(treeNode, patch) {
+  console.log("entering patch -----------------------")
+  console.log("getPath: ", getPath(treeNode))
+  console.log("getParentPath: ", getPath(getParent(treeNode)))
   let listName = getRelativePath(getParent(treeNode), treeNode)
+  console.log("patch content: ", patch)
+  console.log("split json path: ", splitJsonPath(patch.path))
+  console.log("listName:xxxxxxxxxxxxxxxxx", listName)
   let snapshotLeaf = Object.values(getSnapshot(treeNode))[0]
   const pathXS = patch.path.split('/') 
+  // 根上的操作
+  let pathparts = splitJsonPath(patch.path)
   const recordName = pathXS.slice(0,3).join('/')
+  console.log("recordName: ", recordName)
   switch (patch.op) {
     case "replace":
-      let field = pathXS[pathXS.length-1]
-      if (currentRecords.get(recordName)[field] !== patch.value) {
-        // 更新缓存(因为不是attchedRecordFront)
-        currentRecords.set(recordName, snapshotLeaf) 
-        console.info("Frontend replace sync to Backend: ", `recordName: ${recordName} field: ${field} value: ${JSON.stringify(patch.value)}`)
-        dsc.record.setData(recordName, `${field}`, patch.value)
+      // root replace
+      if (pathparts.length===1) {
+        let recordName = `${listName}/classProperty`
+        let recordContent = {[pathparts[0]]: patch.value}
+        await attachRecordFront(recordName, recordContent, 
+          ()=> {
+            console.log("create new data for root node", listName)
+            let list = dsc.record.getList(listName)
+            list.whenReady(()=>{list.addEntry(recordName)})
+          },
+          (newData)=> {
+            console.log("get root property change from others")
+            applySnapshot(treeNode, newData)
+          },
+          ()=>{}
+        )
+      } else {
+        let field = pathXS[pathXS.length-1]
+        if (currentRecords.get(recordName)[field] !== patch.value) {
+          // 更新缓存(因为不是attchedRecordFront)
+          currentRecords.set(recordName, snapshotLeaf) 
+          console.info("Frontend replace sync to Backend: ", `recordName: ${recordName} field: ${field} value: ${JSON.stringify(patch.value)}`)
+          dsc.record.setData(recordName, `${field}`, patch.value)
+        }
       }
       break
     case "add":
-      console.log("patch", patch)
+      console.log("add patch", patch)
       await attachRecordFront(recordName, patch.value,
         ()=> {
           console.log("create new data from front", listName)

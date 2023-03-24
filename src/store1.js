@@ -9,7 +9,7 @@ const Todo = types.model({
 .actions(self=>({
   select() {
     getParent(self, 2).setSelect(self)
-    console.log("store content: ", getRoot(self).toJSON())
+    //console.log("store content: ", getRoot(self).toJSON())
   },
   setName(value) {
     self.name = value
@@ -30,7 +30,7 @@ const TodoStore = types.model({
   add(name, done) {
     let id = dsc.getUid()
     self.todos.put({id, name})
-    console.log("store content: ", getRoot(self).toJSON())
+    //console.log("store content: ", getRoot(self).toJSON())
   },
   removeTodo(todo) {
     destroy(todo)
@@ -56,7 +56,7 @@ const RootStore = types
   export const root = RootStore.create({})
 
   onPatch(root.todoStore, patch=> {
-    triggerDSUpdate(root.todoStore, patch)
+    triggerDSUpdate(root.todoStore.todos, patch)
   })
   
   
