@@ -15,11 +15,13 @@
 }
 */
 
-import {diff} from 'jiff'
+import * as jiff from 'jiff'
 import { dsc } from './contexts.jsx'
 import { getRelativePath, getParent, getIdentifier, 
   unprotect, getChildType, applySnapshot, getRoot, destroy, getSnapshot } from "mobx-state-tree"
 import isEqual from "lodash/isequal"
+import omit from "lodash/omit"
+
 
 // 本地记录缓存
 const currentRecords = new Map()
@@ -130,22 +132,31 @@ export async function loadFromDS(node) {
 
 // 前端数据同步到后端数据
 export async function triggerDSUpdate(treeNode, patch) {
-  let listName = getRelativePath(getParent(treeNode), treeNode)
-  let snapshotLeaf = Object.values(getSnapshot(treeNode))[0]
+  console.log("patch", patch)
   const pathXS = patch.path.split('/') 
+  const listName = pathXS.slice(0,2).join('/')
+  const childName = listName.split('/')[1]
   const recordName = pathXS.slice(0,3).join('/')
+  console.log("front:", listName, recordName)
+  let _snapshotLeaf = Object.values(getSnapshot(treeNode))[0]
+  let snapshotLeaf = (_snapshotLeaf===undefined)? {} : Object.values(_snapshotLeaf)[0]
+  console.log("snapshotLeaf: ", snapshotLeaf)
   switch (patch.op) {
     case "replace":
       let field = pathXS[pathXS.length-1]
+      console.log("pathXS: ", pathXS)
+      console.log("field: ", field)
+      console.log("record: ", currentRecords.get(recordName))
       if (currentRecords.get(recordName)[field] !== patch.value) {
-        // 更新缓存(因为不是attchedRecordFront)
-        currentRecords.set(recordName, snapshotLeaf) 
         console.info("Frontend replace sync to Backend: ", `recordName: ${recordName} field: ${field} value: ${JSON.stringify(patch.value)}`)
+        // 更新缓存
+        let record = {...currentRecords.get(recordName)}
+        record[field] = patch.value
+        currentRecords.set(recordName, record)
         dsc.record.setData(recordName, `${field}`, patch.value)
       }
       break
     case "add":
-      console.log("patch", patch)
       await attachRecordFront(recordName, patch.value,
         ()=> {
           console.log("create new data from front", listName)
@@ -154,6 +165,7 @@ export async function triggerDSUpdate(treeNode, patch) {
         },
         (newData)=> {
           console.log('get change from others')
+          console.log("childName", childName)
           let idValue = getIdentifier(getChildType(treeNode).create(newData))
           let recordNode = treeNode.get(idValue)
           applySnapshot(recordNode, newData)
@@ -163,16 +175,18 @@ export async function triggerDSUpdate(treeNode, patch) {
           if (!isEqual(patch.value, memoryData)) {
             // record子属性add
             // todo: 只处理了map(不过建议用map) 还需array处理
-            console.info("snapshotLeaf", snapshotLeaf)
-            console.info("localRecordContent", memoryData)
-            let newPatch = diff(memoryData, snapshotLeaf)[0]
+            // console.info("snapshotLeaf", snapshotLeaf)
+            // console.info("localRecordContent", memoryData)
+            // 对比snapshotLeaf和本端记录内容的差异生成patch再做后端修改
+            let newPatch = jiff.diff(memoryData, snapshotLeaf)[0]
             console.info("new patch: ", newPatch)
             // 只有发起端才会有结果, 监听端则忽略
             if (newPatch!==undefined) {
+              // 更新缓存
+              let patched = jiff.patch([newPatch], memoryData) 
+              currentRecords.set(recordName, patched)
               let [_, field, key] = newPatch.path.split('/')
-              console.info('field and key: ', field,  key)
-              // 更新缓存因为这里是前端更改过
-              currentRecords.set(recordName, snapshotLeaf) 
+              console.info('add field and key: ', field,  key)
               dsc.record.setData(recordName, `${field}.${key}`, patch.value)
             }
           }
@@ -184,9 +198,13 @@ export async function triggerDSUpdate(treeNode, patch) {
       let removePath = patch.path.replace(recordName, "")
       if (removePath!=="") {
         let [_, field, key] = removePath.split('/')
-        console.info('field and key: ', field,  key)
-        // 更新缓存因为不是attachedRecordFront
-        currentRecords.set(recordName, snapshotLeaf) 
+        console.info('remove field and key: ', field,  key)
+        // 缓存更新
+        // 不能直接修改, 需要做克隆
+        let record = {...currentRecords.get(recordName)}
+        let fieldTobeChanged = record[field]
+        record[field] = omit(fieldTobeChanged, key)
+        currentRecords.set(recordName, record)
         // record子属性remove
         dsc.record.setData(recordName, `${field}.${key}`, undefined)
       } else {
