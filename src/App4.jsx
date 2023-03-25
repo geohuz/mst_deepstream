@@ -7,10 +7,15 @@ const App = observer(() => {
   function handleAddTodo() {
     root.todoStore.add("brew bear", false)
   }
+
+  useEffect(()=> {
+    console.log("at the UI: ", root.toJSON())
+  }, [])
   
   return (
     <>
       <h1> Todo Manager </h1>
+      <button onClick={()=>console.log(root.toJSON())}>check store</button>
       <button onClick={handleAddTodo}>Add Todo</button>
 
       <h2>Todos</h2>
@@ -34,7 +39,13 @@ const Todo = observer(({item}) => {
       <input type="text" ref={inputName} /> 
       <button onClick={()=>item.setName(inputName.current.value)}>change </button> 
       <button onClick={()=>item.remove()}>delete task</button>
-      <span>select</span><input type="checkbox" onChange={()=>item.select()}/>
+      <span>select</span>
+      <input type="checkbox" 
+        checked={item.selected}
+        onChange={()=>{
+          item.switchSelect()
+        }}
+      />
     </>
   )
 })

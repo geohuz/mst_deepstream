@@ -8,15 +8,24 @@ const Todo = types.model({
 })
 .actions(self=>({
   select() {
+    // (self, 1): Todo, (self, 2): TodoStore 
     getParent(self, 2).setSelect(self)
-    //console.log("store content: ", getRoot(self).toJSON())
   },
   setName(value) {
     self.name = value
   },
+  switchSelect() {
+    getParent(self, 2).switchSelect(self)
+  },
   remove() {
     // 必须绕到parent操作
     getParent(self, 2).removeTodo(self)
+  }
+}))
+.views(self=> ({
+  get selected() {
+    let result = (getParent(self, 2).selectedTodo === self)
+    return result
   }
 }))
 
@@ -24,7 +33,7 @@ const TodoStore = types.model({
   todos: types.map(Todo),
   // 在关系数据模型中这个是不成立的. 它不应该放在表级别
   // 但是单选怎么办? 单选只能操作去掉被选择的那个
-  selectedTodo: types.maybe(types.reference(Todo))
+  selectedTodo: types.maybeNull(types.reference(Todo))
 })
 .actions(self=> ({
   add(name, done) {
@@ -35,8 +44,12 @@ const TodoStore = types.model({
   removeTodo(todo) {
     destroy(todo)
   },
-  setSelect(todo) {
-    self.selectedTodo = todo
+  switchSelect(todo) {
+    if (!self.selectedTodo) {
+      self.selectedTodo = todo
+    } else {
+      self.selectedTodo = null
+    }
   },
   load: flow(function* load() {
     yield loadFromDS(self.todos)

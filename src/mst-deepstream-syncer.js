@@ -1,18 +1,9 @@
 // todo: 
-// 1. getUid: done
-// 2. reference: example done
-// 4. snapshot级别的同步
-// 3. scroll to 避免大量listener
-// 5. make dps store/field type?
-// 6. db 端
-// 如果在类级别有字段也同时加入list
-/*
-只能有一条记录
- recordName:
- /todos/classfields
-{
-  selectedTodo: patch.value
-}
+// 如果出现bug怎么操作回滚?
+// 多个listProperties
+// 如果在list级别有字段也同时加入list
+/* 只能有一条记录
+ /recordName/listProperties { selectedTodo: patch.value }
 */
 
 import {diff} from 'jiff'
@@ -20,45 +11,55 @@ import { dsc } from './contexts.jsx'
 import { getRelativePath, getParent, getIdentifier, 
   unprotect, getChildType, applySnapshot, getRoot, destroy, applyPatch, getSnapshot, getPath, getParentOfType, getPathParts, getType, splitJsonPath } from "mobx-state-tree"
 import isEqual from "lodash/isequal"
+import { memo } from 'react'
 import { split } from 'lodash'
 
-// 本地记录缓存
+// 记录缓存
 const currentRecords = new Map()
-// 缓存管理
-const attachRecord = async(recordName, applyCreate, applyChange) => {
+// 它端生成记录缓存
+const attachRecord = async(recordName, applyCreate, applyUpdate) => {
   // 如果缓存没有
   if (!currentRecords.get(recordName)) {
+    // DS新建记录
     let recordHandler = dsc.record.getRecord(recordName)
     await recordHandler.whenReady()
     currentRecords.set(recordName, recordHandler.get())
+    // 订阅更新
     recordHandler.subscribe(async(newData)=> {
       if (!isEqual(currentRecords.get(recordName), newData)) {
         currentRecords.set(recordName, newData)
-        applyChange(newData)
+        // 更新数据发给回调处理
+        applyUpdate(newData)
       }
     })
+    // 新建数据发给回调处理
     applyCreate(currentRecords.get(recordName))
   } 
 }
 
+// 本端生成记录缓存
 const attachRecordFront = async(recordName, recordContent, 
-  applyCreate, applyChange, applyExistedRecord) => {
+  applyCreate, applyChange, applyExisted) => {
+  let memoryContent = currentRecords.get(recordName)
   if (!currentRecords.get(recordName)) {
     currentRecords.set(recordName, recordContent)
     let recordHandler = dsc.record.getRecord(recordName)
     await recordHandler.whenReady()
     recordHandler.set(recordContent) // 新增记录
     recordHandler.subscribe(async(newData)=> {
-      // 后续记录变化
-      if (!isEqual(currentRecords.get(recordName), newData)) {
+      // 收到它端数据变化
+      if (!isEqual(memoryContent, newData)) {
         currentRecords.set(recordName, newData)
         applyChange(newData)
       }
     })
-    applyCreate() // 新记录
+    applyCreate() // 新记录给到回调处理
   } else {
-    // 如果已经有这条记录, 则返回去让前端处理
-    applyExistedRecord(currentRecords.get(recordName))
+    if (!isEqual(memoryContent, recordContent)) {
+      // 如果已经有这条记录且内容有变化
+      // 让回调处理变化, 返回值更新缓存
+      applyExisted(memoryContent)
+    }
   }
 }
 
@@ -76,7 +77,17 @@ const deleteRecord = async(recordName, applyDelete) => {
   }
 }
 
-// 后端数据同步到前端
+function applyListPropertyPatch(node, data) {
+  Object.entries(data).map(([key, value])=> {
+    /*
+    字段级别修改使用applyPatch
+    /recordName/listProperties { selectedTodo: 'lfmj1cnh-9ox8vuix9t4' }
+    */
+    applyPatch(getParent(node, 1), {op: "replace", path: `/${key}`, value: value})
+  })
+}
+
+// 启动首次获得DS数据
 export async function loadFromDS(node) { 
   let listName = getRelativePath(getParent(node), node)
   console.info("load listName: ", listName)
@@ -89,15 +100,23 @@ export async function loadFromDS(node) {
     console.info("BackEnd list add sync to Frontend ", recordName)
     await attachRecord(recordName, 
       newData=>{
-        unprotect(getRoot(node))
-        node.put(newData)
+        if (recordName.includes('listProperties')) {
+          applyListPropertyPatch(node, newData)
+        } else {
+          unprotect(getRoot(node))
+          node.put(newData)
+        }
       },
       changedData=>{
-        // getChildType (node: todos/users)
-        // child: user 
-        let idValue = getIdentifier(getChildType(node).create(changedData))
-        let recordNode = node.get(idValue)
-        applySnapshot(recordNode, changedData)
+        if (recordName.includes("listProperties")) {
+          applyListPropertyPatch(node, changedData)
+        } else {
+          // getChildType (node: todos/users)
+          // child: user 
+          let idValue = getIdentifier(getChildType(node).create(changedData))
+          let recordNode = node.get(idValue)
+          applySnapshot(recordNode, changedData)
+        }
       }
     )
   })
@@ -118,20 +137,21 @@ export async function loadFromDS(node) {
     await attachRecord(item,
       newData=> {
         // root property
-        if (item.includes("classProperty")) {
-          Object.entries(newData).map(([key, value])=> {
-            applyPatch(getParent(node, 1), {op: "replace", path: `/${key}`, value: value})
-            //console.log("node content: ", getParent(node, 2).toJSON())
-          })
+        if (item.includes("listProperties")) {
+          applyListPropertyPatch(node, newData)
         } else {
           let idValue = getIdentifier(getChildType(node).create(newData))
           snapshot[idValue] = newData
         }
       },
       changedData=> {
-        let idValue = getIdentifier(getChildType(node).create(changedData))
-        let recordNode = node.get(idValue)
-        applySnapshot(recordNode, changedData)
+        if (item.includes("listProperties")) {
+          applyListPropertyPatch(node, changedData)
+        } else {
+          let idValue = getIdentifier(getChildType(node).create(changedData))
+          let recordNode = node.get(idValue)
+          applySnapshot(recordNode, changedData)
+        }
       }
     )
   }))
@@ -139,7 +159,7 @@ export async function loadFromDS(node) {
   applySnapshot(node, snapshot)
 }
 
-// 前端数据同步到后端数据
+// 本端数据生成
 export async function triggerDSUpdate(treeNode, patch) {
   console.log("entering patch -----------------------")
   console.log("getPath: ", getPath(treeNode))
@@ -156,21 +176,30 @@ export async function triggerDSUpdate(treeNode, patch) {
   console.log("recordName: ", recordName)
   switch (patch.op) {
     case "replace":
-      // root replace
       if (pathparts.length===1) {
-        let recordName = `${listName}/classProperty`
+        // listProperty
+        let recordName = `${listName}/listProperties`
         let recordContent = {[pathparts[0]]: patch.value}
         await attachRecordFront(recordName, recordContent, 
           ()=> {
-            console.log("create new data for root node", listName)
+            console.log("listProperty is initiated from op.replace", listName)
             let list = dsc.record.getList(listName)
             list.whenReady(()=>{list.addEntry(recordName)})
           },
-          (newData)=> {
-            console.log("get root property change from others")
-            applySnapshot(treeNode, newData)
+          (othersData)=> {
+            // 收到它端数据变化
+            console.log("get listProperty change from others", othersData)
+            applyListPropertyPatch(treeNode, othersData)
           },
-          ()=>{}
+          (memoryContent)=>{
+            console.log("local applied a change to the listProperty", memoryContent, patch.value)
+            // 必须先更新缓存!!
+            let newRecordData = Object.assign({}, memoryContent, {[pathparts[0]]: patch.value})
+            currentRecords.set(recordName, newRecordData)
+            // 更新DS
+            let value = patch.value===undefined? null : patch.value
+            dsc.record.setData(recordName, `${pathparts[0]}`, value)
+          }
         )
       } else {
         let field = pathXS[pathXS.length-1]
@@ -209,7 +238,7 @@ export async function triggerDSUpdate(treeNode, patch) {
             if (newPatch!==undefined) {
               let [_, field, key] = newPatch.path.split('/')
               console.info('field and key: ', field,  key)
-              // 更新缓存因为这里是前端更改过
+              // 本端的修改更新到缓存
               currentRecords.set(recordName, snapshotLeaf) 
               dsc.record.setData(recordName, `${field}.${key}`, patch.value)
             }
@@ -217,17 +246,35 @@ export async function triggerDSUpdate(treeNode, patch) {
         })
       break
     case "remove":
-      // remove 指令没有value, 只有path. 如果把recordName从path string
+      // remove 指令没有value, 只有path. 把recordName从path string
       // 前部移除, 如果不为空则为移除的具体子属性, 否则就是删掉整条记录
       let removePath = patch.path.replace(recordName, "")
       if (removePath!=="") {
         let [_, field, key] = removePath.split('/')
         console.info('field and key: ', field,  key)
         // 更新缓存因为不是attachedRecordFront
-        currentRecords.set(recordName, snapshotLeaf) 
+        currentRecords.set(recordName, snapshotLeaf)
         // record子属性remove
         dsc.record.setData(recordName, `${field}.${key}`, undefined)
       } else {
+        // 检查是否有listProperties
+        let listPropertyRecordName = `${listName}/listProperties` 
+        let listProperties = Object.assign({}, currentRecords.get(listPropertyRecordName))
+        let pathParts = splitJsonPath(patch.path)
+        let assumedValue = pathParts[pathParts.length-1]
+        Object.entries(listProperties).map(([key, value]) => {
+          if (value ===  assumedValue) {
+            listProperties[key] = null
+          }
+        })
+        if (!isEqual(listProperties, currentRecords.get(listPropertyRecordName))) {
+          console.log("modified listProperties", listProperties)
+          currentRecords.set(listPropertyRecordName, listProperties)
+          let rec= dsc.record.getRecord(listPropertyRecordName)
+          await rec.whenReady()
+          dsc.record.setData(listPropertyRecordName, listProperties)
+        }
+
         await deleteRecord(recordName, (recordName)=> {
           console.info("Frontend delete sync to Backend: ", patch)
           let list = dsc.record.getList(listName)
