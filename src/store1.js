@@ -33,15 +33,16 @@ const TodoStore = types.model({
   todos: types.map(Todo),
   // 在关系数据模型中这个是不成立的. 它不应该放在表级别
   // 但是单选怎么办? 单选只能操作去掉被选择的那个
-  selectedTodo: types.maybeNull(types.reference(Todo))
+  // safeReference 确保todo删掉后自动设置到这里(如果是选中的这里设为undefined)
+  selectedTodo: types.maybeNull(types.safeReference(Todo))
 })
 .actions(self=> ({
   add(name, done) {
     let id = dsc.getUid()
     self.todos.put({id, name})
-    //console.log("store content: ", getRoot(self).toJSON())
   },
   removeTodo(todo) {
+    // 如果不是safeReference这里要手动重置 
     destroy(todo)
   },
   switchSelect(todo) {

@@ -248,6 +248,7 @@ export async function triggerDSUpdate(treeNode, patch) {
     case "remove":
       // remove 指令没有value, 只有path. 把recordName从path string
       // 前部移除, 如果不为空则为移除的具体子属性, 否则就是删掉整条记录
+      // bug: remove apply patch
       let removePath = patch.path.replace(recordName, "")
       if (removePath!=="") {
         let [_, field, key] = removePath.split('/')
@@ -257,24 +258,6 @@ export async function triggerDSUpdate(treeNode, patch) {
         // record子属性remove
         dsc.record.setData(recordName, `${field}.${key}`, undefined)
       } else {
-        // 检查是否有listProperties
-        let listPropertyRecordName = `${listName}/listProperties` 
-        let listProperties = Object.assign({}, currentRecords.get(listPropertyRecordName))
-        let pathParts = splitJsonPath(patch.path)
-        let assumedValue = pathParts[pathParts.length-1]
-        Object.entries(listProperties).map(([key, value]) => {
-          if (value ===  assumedValue) {
-            listProperties[key] = null
-          }
-        })
-        if (!isEqual(listProperties, currentRecords.get(listPropertyRecordName))) {
-          console.log("modified listProperties", listProperties)
-          currentRecords.set(listPropertyRecordName, listProperties)
-          let rec= dsc.record.getRecord(listPropertyRecordName)
-          await rec.whenReady()
-          dsc.record.setData(listPropertyRecordName, listProperties)
-        }
-
         await deleteRecord(recordName, (recordName)=> {
           console.info("Frontend delete sync to Backend: ", patch)
           let list = dsc.record.getList(listName)
