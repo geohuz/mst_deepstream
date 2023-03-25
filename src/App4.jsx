@@ -2,20 +2,26 @@ import {useEffect, useRef, useState} from 'react'
 import { root } from './store1'
 import { observer } from 'mobx-react-lite'
 import {values} from 'mobx'
+import aStore  from './generalLoader'
 
 const App = observer(() => {
   function handleAddTodo() {
     root.todoStore.add("brew bear", false)
   }
-
+  const loader = useRef(null)
   useEffect(()=> {
-    console.log("at the UI: ", root.toJSON())
+    async function fetch() {
+      loader.current = await aStore.load()
+    }
+    fetch()
   }, [])
   
   return (
     <>
       <h1> Todo Manager </h1>
       <button onClick={()=>console.log(root.toJSON())}>check store</button>
+      <button onClick={()=>loader.current.previous()}>previous</button>
+      <button onClick={()=>loader.current.next()}>next</button>
       <button onClick={handleAddTodo}>Add Todo</button>
 
       <h2>Todos</h2>

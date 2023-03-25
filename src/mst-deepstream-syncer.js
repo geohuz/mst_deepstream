@@ -88,7 +88,7 @@ function applyListPropertyPatch(node, data) {
 }
 
 // 启动首次获得DS数据
-export async function loadFromDS(node) { 
+export async function DSLoader(node) { 
   let listName = getRelativePath(getParent(node), node)
   console.info("load listName: ", listName)
   let list = dsc.record.getList(listName)

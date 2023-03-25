@@ -1,5 +1,5 @@
 import { types, flow, onPatch, destroy, getParent, getRoot, getMembers } from 'mobx-state-tree'
-import { loadFromDS, triggerDSUpdate } from './mst-deepstream-syncer.js'
+import { DSLoader, triggerDSUpdate } from './mst-deepstream-syncer.js'
 import {dsc} from './contexts'
 import {values} from 'mobx'
 import {remove} from 'mobx'
@@ -50,7 +50,7 @@ const UserStore = types
       destroy(user)
     },
     load: flow(function* load() {
-      yield loadFromDS(self.users)
+      yield DSLoader(self.users)
     }),
   }))
 
@@ -93,7 +93,7 @@ const TodoStore = types
       destroy(todo)
     },
     load: flow(function* load() {
-      yield loadFromDS(self.todos)
+      yield DSLoader(self.todos)
     })
   }))
 

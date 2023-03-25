@@ -1,5 +1,5 @@
 import { types, flow, onPatch, getParent, getRoot, destroy } from "mobx-state-tree"
-import { loadFromDS, triggerDSUpdate } from './mst-deepstream-syncer.js'
+import { DSLoader, triggerDSUpdate } from './mst-deepstream-syncer.js'
 import {dsc} from './contexts'
 
 const Todo = types.model({
@@ -53,7 +53,7 @@ const TodoStore = types.model({
     }
   },
   load: flow(function* load() {
-    yield loadFromDS(self.todos)
+    yield DSLoader(self.todos)
   })
 }))
 
