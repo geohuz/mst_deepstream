@@ -9,14 +9,16 @@
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
 import { getRelativePath, getParent, getIdentifier, 
-  unprotect, getChildType, applySnapshot, getRoot, destroy, applyPatch, getSnapshot, getPath, getParentOfType, getPathParts, getType, splitJsonPath } from "mobx-state-tree"
+  unprotect, getChildType, applySnapshot, getRoot, destroy, applyPatch, getSnapshot, getPath, splitJsonPath, onPatch } from "mobx-state-tree"
 import isEqual from "lodash/isequal"
-import { memo } from 'react'
-import { split } from 'lodash'
 
 // 记录缓存
 const currentRecords = new Map()
-// 它端生成记录缓存
+const recordHandlers = new Map()
+let patchListeners = []
+let dsListeners = []
+
+// 它端生成记录缓存管理器
 const attachRecord = async(recordName, applyCreate, applyUpdate) => {
   // 如果缓存没有
   if (!currentRecords.get(recordName)) {
@@ -32,12 +34,13 @@ const attachRecord = async(recordName, applyCreate, applyUpdate) => {
         applyUpdate(newData)
       }
     })
+    recordHandlers.set(recordName, recordHandler)
     // 新建数据发给回调处理
     applyCreate(currentRecords.get(recordName))
   } 
 }
 
-// 本端生成记录缓存
+// 本端生成记录缓存管理器
 const attachRecordFront = async(recordName, recordContent, 
   applyCreate, applyChange, applyExisted) => {
   let memoryContent = currentRecords.get(recordName)
@@ -53,6 +56,7 @@ const attachRecordFront = async(recordName, recordContent,
         applyChange(newData)
       }
     })
+    recordHandlers.set(recordName, recordHandler)
     applyCreate() // 新记录给到回调处理
   } else {
     if (!isEqual(memoryContent, recordContent)) {
@@ -88,13 +92,22 @@ function applyListPropertyPatch(node, data) {
 }
 
 // 启动首次获得DS数据
-export async function DSLoader(node) { 
-  let listName = getRelativePath(getParent(node), node)
-  console.info("load listName: ", listName)
-  let list = dsc.record.getList(listName)
+export async function DSLoader(node, listProvider=undefined) { 
   let snapshot = {}
+  let initialListData = []
+  let list
+  const listName = getRelativePath(getParent(node), node)
+  console.info("load listName: ", listName)
+
+  list = dsc.record.getList(listName)
   await list.whenReady()
 
+  if (listProvider!==undefined) {
+    initialListData = await listProvider()
+  } else {
+    initialListData = list.getEntries()
+  }
+  
   // list 它端添加侦听
   list.on('entry-added', async(recordName)=> {
     console.info("BackEnd list add sync to Frontend ", recordName)
@@ -133,7 +146,7 @@ export async function DSLoader(node) {
   })
   console.info("list length: ", list.getEntries().length)
   // 首次同步
-  await Promise.all(list.getEntries().map(async(item)=>{
+  await Promise.all(initialListData.map(async(item)=>{
     await attachRecord(item,
       newData=> {
         // root property
@@ -157,6 +170,10 @@ export async function DSLoader(node) {
   }))
   console.info("before return snapshot: ", snapshot)
   applySnapshot(node, snapshot)
+
+  return { 
+    list: list
+  } 
 }
 
 // 本端数据生成
@@ -174,6 +191,7 @@ export async function triggerDSUpdate(treeNode, patch) {
   let pathparts = splitJsonPath(patch.path)
   const recordName = pathXS.slice(0,3).join('/')
   console.log("recordName: ", recordName)
+  let list = dsc.record.getList(listName)
   switch (patch.op) {
     case "replace":
       if (pathparts.length===1) {
@@ -183,7 +201,6 @@ export async function triggerDSUpdate(treeNode, patch) {
         await attachRecordFront(recordName, recordContent, 
           ()=> {
             console.log("listProperty is initiated from op.replace", listName)
-            let list = dsc.record.getList(listName)
             list.whenReady(()=>{list.addEntry(recordName)})
           },
           (othersData)=> {
@@ -216,7 +233,6 @@ export async function triggerDSUpdate(treeNode, patch) {
       await attachRecordFront(recordName, patch.value,
         ()=> {
           console.log("create new data from front", listName)
-          let list = dsc.record.getList(listName)
           list.whenReady(()=>{list.addEntry(recordName)})
         },
         (newData)=> {
@@ -260,10 +276,52 @@ export async function triggerDSUpdate(treeNode, patch) {
       } else {
         await deleteRecord(recordName, (recordName)=> {
           console.info("Frontend delete sync to Backend: ", patch)
-          let list = dsc.record.getList(listName)
           list.whenReady(()=> list.removeEntry(recordName))
         })
       }
       break
   }
+}
+
+/*
+storeInfo:
+  { item.store: todoStore, 
+    collectionName: todos, 
+  }
+*/
+export async function DSSyncRunner(storeInfo, 
+    listProvider, withPatchListeners=true) 
+{
+  function dispose() {
+    // 最高级别清理
+    patchListeners && patchListeners.map(disposer=>disposer())
+    dsListeners && dsListeners.map(item=>{
+      item.list.discard()
+      item.list.callbacks.clear()
+    })
+    dsListeners = []
+    patchListeners = []
+    
+    currentRecords.clear()
+    recordHandlers.forEach(value=>value.discard())
+    recordHandlers.clear()
+  }
+
+  // 先清理
+  dispose()
+
+  // 重新添加监听
+  if (withPatchListeners) {
+    const patchDisposer = onPatch(storeInfo.store, patch=> {
+      triggerDSUpdate(storeInfo.collectionName, patch)
+    })
+    patchListeners.push(patchDisposer)
+  }
+
+  const dsDisposer = await DSLoader(storeInfo.collectionName, 
+                            listProvider) 
+  dsListeners.push(dsDisposer)
+
+  return dispose
+
 }

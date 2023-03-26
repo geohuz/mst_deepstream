@@ -14,9 +14,6 @@ const Todo = types.model({
   setName(value) {
     self.name = value
   },
-  switchSelect() {
-    getParent(self, 2).switchSelect(self)
-  },
   remove() {
     // 必须绕到parent操作
     getParent(self, 2).removeTodo(self)
@@ -31,10 +28,6 @@ const Todo = types.model({
 
 const TodoStore = types.model({
   todos: types.map(Todo),
-  // 在关系数据模型中这个是不成立的. 它不应该放在表级别
-  // 但是单选怎么办? 单选只能操作去掉被选择的那个
-  // safeReference 确保todo删掉后自动设置到这里(如果是选中的这里设为undefined)
-  selectedTodo: types.maybeNull(types.safeReference(Todo))
 })
 .actions(self=> ({
   add(name, done) {
@@ -45,22 +38,20 @@ const TodoStore = types.model({
     // 如果不是safeReference这里要手动重置 
     destroy(todo)
   },
-  switchSelect(todo) {
-    if (!self.selectedTodo) {
-      self.selectedTodo = todo
-    } else {
-      self.selectedTodo = null
-    }
+  listProvider(record) {
+    let xs = [
+      "/todos/lfpbbc0h-1yrtzfr757m",
+      "/todos/lfpbbcio-2hxgud42e2g",
+      "/todos/lfpbbczk-7clv5vaejo9",
+    ]
+    return [xs.find(item=>item===record)]
   },
-  listProvider(page) {
-    return [page, 1,2,3,4]
-  },
-  load: flow(function* load(page) {
+  load: flow(function* load(record) {
     yield DSSyncRunner({
       store: self,
       collectionName: self.todos
     }, 
-    //()=>self.listProvider(page)
+    ()=>self.listProvider(record)
   )}),
 }))
 
