@@ -1,10 +1,5 @@
 // todo: 
-// 如果出现bug怎么操作回滚?
-// 多个listProperties
-// 如果在list级别有字段也同时加入list
-/* 只能有一条记录
- /recordName/listProperties { selectedTodo: patch.value }
-*/
+// 操作回滚?
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
