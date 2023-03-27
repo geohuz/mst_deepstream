@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useRef } from 'react'
 import { root } from './store2'
 import { observer } from 'mobx-react-lite'
 import {values} from 'mobx'
@@ -9,7 +9,6 @@ const App = observer(() => {
     root.todoStore.add("brew bear", false)
   }
 
-  const loader = useRef(null)
   useEffect(()=> {
     let disposer
     async function fetch() {
