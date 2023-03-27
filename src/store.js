@@ -117,11 +117,3 @@ const RootStore = types
 
 export const root = RootStore.create({})
 
-/*
-onPatch(root.userStore, patch=>{
-  triggerDSUpdate(root.userStore.users, patch)
-})
-
-onPatch(root.todoStore, patch=> {
-  triggerDSUpdate(root.todoStore.todos, patch)
-})*/

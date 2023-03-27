@@ -285,7 +285,7 @@ storeInfo:
   }
 */
 export async function DSSyncRunner(storeInfo, 
-    listProvider, withPatchListeners=true) 
+  listProvider, withPatchListener=true) 
 {
   function dispose() {
     // 最高级别清理
@@ -305,17 +305,18 @@ export async function DSSyncRunner(storeInfo,
   // 先清理
   dispose()
 
-  // 重新添加监听
-  if (withPatchListeners) {
+  const dsDisposer = await DSLoader(storeInfo.collection, 
+                            listProvider) 
+  dsListeners.push(dsDisposer)
+
+  // 添加监听
+  if (withPatchListener) {
     const patchDisposer = onPatch(storeInfo.store, patch=> {
       triggerDSUpdate(storeInfo.collection, patch)
     })
     patchListeners.push(patchDisposer)
   }
 
-  const dsDisposer = await DSLoader(storeInfo.collection, 
-                            listProvider) 
-  dsListeners.push(dsDisposer)
 
   return dispose
 
