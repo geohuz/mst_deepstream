@@ -1,5 +1,8 @@
 // todo: 
 // 操作回滚?
+// 前端数据intersection observer?
+// every record should have removeListener/attachListener
+// then user use it in the observer
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
@@ -289,8 +292,8 @@ export async function DSSyncRunner(storeInfo,
 {
   function dispose() {
     // 最高级别清理
-    patchListeners && patchListeners.map(disposer=>disposer())
-    dsListeners && dsListeners.map(item=>{
+    (patchListeners.length!==0) && patchListeners.map(disposer=>disposer())
+    (dsListeners.length!==0) && dsListeners.map(item=>{
       item.list.discard()
       item.list.callbacks.clear()
     })
@@ -316,8 +319,5 @@ export async function DSSyncRunner(storeInfo,
     })
     patchListeners.push(patchDisposer)
   }
-
-
   return dispose
-
 }
