@@ -2,7 +2,6 @@ import {useEffect, useRef, useState} from 'react'
 import { root } from './store1'
 import { observer } from 'mobx-react-lite'
 import {values} from 'mobx'
-//import aStore  from './generalLoader'
 
 const App = observer(() => {
   function handleAddTodo() {
@@ -20,8 +19,6 @@ const App = observer(() => {
     <>
       <h1> Todo Manager </h1>
       <button onClick={()=>console.log(root.toJSON())}>check store</button>
-      <button onClick={()=>loader.current()}>stop world</button>
-      
       <button onClick={handleAddTodo}>Add Todo</button>
 
       <h2>Todos</h2>

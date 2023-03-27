@@ -281,7 +281,7 @@ export async function triggerDSUpdate(treeNode, patch) {
 /*
 storeInfo:
   { item.store: todoStore, 
-    collectionName: todos, 
+    collection: todos, 
   }
 */
 export async function DSSyncRunner(storeInfo, 
@@ -308,12 +308,12 @@ export async function DSSyncRunner(storeInfo,
   // 重新添加监听
   if (withPatchListeners) {
     const patchDisposer = onPatch(storeInfo.store, patch=> {
-      triggerDSUpdate(storeInfo.collectionName, patch)
+      triggerDSUpdate(storeInfo.collection, patch)
     })
     patchListeners.push(patchDisposer)
   }
 
-  const dsDisposer = await DSLoader(storeInfo.collectionName, 
+  const dsDisposer = await DSLoader(storeInfo.collection, 
                             listProvider) 
   dsListeners.push(dsDisposer)
 

@@ -49,7 +49,7 @@ const TodoStore = types.model({
   load: flow(function* load(record) {
     yield DSSyncRunner({
       store: self,
-      collectionName: self.todos
+      collection: self.todos
     }, 
     ()=>self.listProvider(record)
   )}),
