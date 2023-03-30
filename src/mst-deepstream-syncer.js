@@ -11,6 +11,11 @@
 // 改变时调用
 // 必须想明白list的重复record问题 数据库端？ 前端？
 // 数据库端不靠谱因为内存是有的
+// 是不是一定要有snapshot级别的呢？ 如果每个字段都做好validation, 并且有回滚？
+// 回滚：如果取消保存， 则需要删除这条记录。 比如add todo, 则有取消， 则就是删除。 因为先add就已经加入了
+// 取消字段级别的修改呢？ 如果按change前可以的。 不需要做任何事情 . change按钮按下后？
+// 前端逻辑， 应该是先add， 然后再删除. 而不是add->提交这种
+// 这样就没有问题了
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
