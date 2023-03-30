@@ -3,11 +3,19 @@
 // 前端数据intersection observer?
 // every record should have removeListener/attachListener
 // then user use it in the observer
+// 关于snapshot级别的同步:
+// deepstream的list只有add/remove/delete
+// record字段级别的变化只能在subscribe这里监听
+// 办法：确保本端前端不是onPatch. 而是onSnapshots
+// 其他的逻辑完全一致. 但是onSnapshot 还是会在状态
+// 改变时调用
+// 必须想明白list的重复record问题 数据库端？ 前端？
+// 数据库端不靠谱因为内存是有的
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
 import { getRelativePath, getParent, getIdentifier, 
-  unprotect, getChildType, applySnapshot, getRoot, destroy, applyPatch, getSnapshot, getPath, splitJsonPath, onPatch } from "mobx-state-tree"
+  unprotect, getChildType, applySnapshot, getRoot, destroy, applyPatch, getSnapshot, getPath, splitJsonPath, onPatch, onSnapshot } from "mobx-state-tree"
 import isEqual from "lodash/isequal"
 
 // 记录缓存
@@ -139,7 +147,7 @@ export async function DSLoader(node, listProvider=undefined) {
       let recordId = xs[xs.length-1]
       unprotect(getRoot(node))
       destroy(node.get(recordId))
-      console.log("removed record id: ", recordId)
+      console.info("removed record id: ", recordId)
     })
   })
   console.info("list length: ", list.getEntries().length)
@@ -174,21 +182,22 @@ export async function DSLoader(node, listProvider=undefined) {
   } 
 }
 
-// 本端数据生成
+
+// 本端数据变化
 export async function triggerDSUpdate(treeNode, patch) {
-  console.log("entering patch -----------------------")
-  console.log("getPath: ", getPath(treeNode))
-  console.log("getParentPath: ", getPath(getParent(treeNode)))
+  console.info("entering patch -----------------------")
+  console.info("getPath: ", getPath(treeNode))
+  console.info("getParentPath: ", getPath(getParent(treeNode)))
   let listName = getRelativePath(getParent(treeNode), treeNode)
-  console.log("patch content: ", patch)
-  console.log("split json path: ", splitJsonPath(patch.path))
-  console.log("listName:xxxxxxxxxxxxxxxxx", listName)
+  console.info("patch content: ", patch)
+  console.info("split json path: ", splitJsonPath(patch.path))
+  console.info("listName:xxxxxxxxxxxxxxxxx", listName)
   let snapshotLeaf = Object.values(getSnapshot(treeNode))[0]
   const pathXS = patch.path.split('/') 
   // 根上的操作
   let pathparts = splitJsonPath(patch.path)
   const recordName = pathXS.slice(0,3).join('/')
-  console.log("recordName: ", recordName)
+  console.info("recordName: ", recordName)
   let list = dsc.record.getList(listName)
   switch (patch.op) {
     case "replace":
@@ -198,16 +207,16 @@ export async function triggerDSUpdate(treeNode, patch) {
         let recordContent = {[pathparts[0]]: patch.value}
         await attachRecordFront(recordName, recordContent, 
           ()=> {
-            console.log("listProperty is initiated from op.replace", listName)
+            console.info("listProperty is initiated from op.replace", listName)
             list.whenReady(()=>{list.addEntry(recordName)})
           },
           (othersData)=> {
             // 收到它端数据变化
-            console.log("get listProperty change from others", othersData)
+            console.info("get listProperty change from others", othersData)
             applyListPropertyPatch(treeNode, othersData)
           },
           (memoryContent)=>{
-            console.log("local applied a change to the listProperty", memoryContent, patch.value)
+            console.info("local applied a change to the listProperty", memoryContent, patch.value)
             // 必须先更新缓存!!
             let newRecordData = Object.assign({}, memoryContent, {[pathparts[0]]: patch.value})
             currentRecords.set(recordName, newRecordData)
@@ -227,20 +236,20 @@ export async function triggerDSUpdate(treeNode, patch) {
       }
       break
     case "add":
-      console.log("add patch", patch)
+      console.info("add patch", patch)
       await attachRecordFront(recordName, patch.value,
         ()=> {
-          console.log("create new data from front", listName)
+          console.info("create new data from front", listName)
           list.whenReady(()=>{list.addEntry(recordName)})
         },
         (newData)=> {
-          console.log('get change from others')
+          console.info('get change from others')
           let idValue = getIdentifier(getChildType(treeNode).create(newData))
           let recordNode = treeNode.get(idValue)
           applySnapshot(recordNode, newData)
         },
         (memoryData)=> {
-          console.log("memory data: ", memoryData)
+          console.info("memory data: ", memoryData)
           if (!isEqual(patch.value, memoryData)) {
             // record子属性add
             // todo: 只处理了map(不过建议用map) 还需array处理
@@ -288,10 +297,9 @@ storeInfo:
   }
 */
 export async function DSSyncRunner(storeInfo, 
-  listProvider, withPatchListener=true) 
+  withPatchListener=true, listProvider) 
 {
   function dispose() {
-    // 最高级别清理
     (patchListeners.length!==0) && patchListeners.map(disposer=>disposer())
     (dsListeners.length!==0) && dsListeners.map(item=>{
       item.list.discard()
@@ -312,12 +320,38 @@ export async function DSSyncRunner(storeInfo,
                             listProvider) 
   dsListeners.push(dsDisposer)
 
-  // 添加监听
+  // 必须是patch级别并且withPatchListener=true 添加patch监听
   if (withPatchListener) {
     const patchDisposer = onPatch(storeInfo.store, patch=> {
       triggerDSUpdate(storeInfo.collection, patch)
     })
     patchListeners.push(patchDisposer)
   }
+  
   return dispose
 }
+
+export async function snapShotDsSync(model, data, action) {
+  const listName = getRelativePath(getParent(model), model)
+  let id = Object.keys(data)[0]
+  const recordName = `${listName}/${id}`
+
+  let list = dsc.record.getList(listName)
+  await list.whenReady()
+  switch (action) {
+    case "add":
+      dsc.record.setData(recordName, data[id])
+      list.addEntry(recordName)
+      break
+    case "replace":
+      dsc.record.setData(recordName, data[id])
+      break
+    case "delete":
+      let record = dsc.record.getRecord(recordName)
+      await record.whenReady()
+      record.discard()
+      record.delete() 
+      list.removeEntry(recordName)
+  }
+}
+

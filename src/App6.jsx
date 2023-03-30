@@ -1,6 +1,8 @@
 import {useEffect, useRef } from 'react'
-import { root } from './store2'
+import { root } from './store3'
 import { observer } from 'mobx-react-lite'
+import { getSnapshot } from 'mobx-state-tree'
+import {snapShotDsSync} from './mst-deepstream-syncer'
 import {values} from 'mobx'
 //import aStore  from './generalLoader'
 
@@ -9,23 +11,30 @@ const App = observer(() => {
     root.todoStore.add("brew bear", false)
   }
 
+  // 如果增加和replace不区分非常可能重复
+  function handleSubmit() {
+    console.info("submited")
+    let kk = getSnapshot(root.todoStore.todos)
+    console.info("kk", kk)
+    snapShotDsSync(root.todoStore.todos, kk, "add")
+  } 
+
   useEffect(()=> {
     let disposer
     async function fetch() {
-      disposer = await root.todoStore.load("/todos/lfpbbcio-2hxgud42e2g")
+      disposer = await root.todoStore.load()
     }
     fetch()
     return ()=>disposer()
   }, [])
-  
+
+
   return (
     <>
       <h1> Todo Manager </h1>
       <button onClick={()=>console.log(root.toJSON())}>check store</button>
-      <button onClick={()=>root.todoStore.load("/todos/lfpbbczk-7clv5vaejo9")}>load another record</button>
-      
       <button onClick={handleAddTodo}>Add Todo</button>
-
+      <button onClick={handleSubmit}>Submit</button>
       <h2>Todos</h2>
       <>
         {values(root.todoStore.todos).map(item=> 

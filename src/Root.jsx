@@ -1,6 +1,6 @@
 import {useDsClient} from './contexts.jsx'
 import { useEffect } from 'react'
-import App from './App3.jsx'
+import App from './App6.jsx'
 import { observer } from 'mobx-react-lite'
 
 function Root() {
