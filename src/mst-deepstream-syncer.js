@@ -3,19 +3,6 @@
 // 前端数据intersection observer?
 // every record should have removeListener/attachListener
 // then user use it in the observer
-// 关于snapshot级别的同步:
-// deepstream的list只有add/remove/delete
-// record字段级别的变化只能在subscribe这里监听
-// 办法：确保本端前端不是onPatch. 而是onSnapshots
-// 其他的逻辑完全一致. 但是onSnapshot 还是会在状态
-// 改变时调用
-// 必须想明白list的重复record问题 数据库端？ 前端？
-// 数据库端不靠谱因为内存是有的
-// 是不是一定要有snapshot级别的呢？ 如果每个字段都做好validation, 并且有回滚？
-// 回滚：如果取消保存， 则需要删除这条记录。 比如add todo, 则有取消， 则就是删除。 因为先add就已经加入了
-// 取消字段级别的修改呢？ 如果按change前可以的。 不需要做任何事情 . change按钮按下后？
-// 前端逻辑， 应该是先add， 然后再删除. 而不是add->提交这种
-// 这样就没有问题了
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
@@ -90,6 +77,13 @@ const deleteRecord = async(recordName, applyDelete) => {
       applyDelete(recordName)
     }
   }
+}
+
+async function isUniqInDS(list, recordName) {
+  console.info("check uinq: ", recordName)
+  let result = list.getEntries().filter(item=>item === recordName)
+  console.info("result", result)
+  return result.length>0? false : true 
 }
 
 function applyListPropertyPatch(node, data) {
@@ -211,9 +205,10 @@ export async function triggerDSUpdate(treeNode, patch) {
         let recordName = `${listName}/listProperties`
         let recordContent = {[pathparts[0]]: patch.value}
         await attachRecordFront(recordName, recordContent, 
-          ()=> {
+          async ()=> {
             console.info("listProperty is initiated from op.replace", listName)
-            list.whenReady(()=>{list.addEntry(recordName)})
+            await list.whenReady()
+            isUniqInDS(list, recordName) && list.addEntry(recordName)
           },
           (othersData)=> {
             // 收到它端数据变化
@@ -243,9 +238,10 @@ export async function triggerDSUpdate(treeNode, patch) {
     case "add":
       console.info("add patch", patch)
       await attachRecordFront(recordName, patch.value,
-        ()=> {
+        async ()=> {
           console.info("create new data from front", listName)
-          list.whenReady(()=>{list.addEntry(recordName)})
+          await list.whenReady()
+          isUniqInDS(list, recordName) && list.addEntry(recordName)
         },
         (newData)=> {
           console.info('get change from others')
