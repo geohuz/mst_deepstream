@@ -3,6 +3,13 @@
 // 前端数据intersection observer?
 // every record should have removeListener/attachListener
 // then user use it in the observer
+/*
+* 关于id
+* 如果id是真实的， 比如身份证号码
+* 为了检查唯一性， add操作必须延后
+* 前端add按钮必须在form渲染后执行，而不是 使用自动生成的id
+* (getUid) add 一条空的记录
+* */
 
 import {diff} from 'jiff'
 import { dsc } from './contexts.jsx'
